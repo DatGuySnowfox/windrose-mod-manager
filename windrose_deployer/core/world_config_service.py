@@ -93,7 +93,7 @@ class WorldConfigService:
 
         record = self.backup.backup_file(
             path,
-            category="server_config",
+            category="world_config",
             description=f"Pre-save backup of WorldDescription.json ({config.world_name})",
         )
         if path.is_file() and record is None:

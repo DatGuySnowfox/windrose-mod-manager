@@ -70,18 +70,18 @@ class ServerTab(ctk.CTkFrame):
         self._build_server_section(self._body)
         self._build_world_section(self._body)
 
-        # Scroll hint — placed over the bottom of the scrollable area
+        # Scroll hint — floating overlay near the bottom of the scrollable area
         self._scroll_hint = ctk.CTkLabel(
             self,
             text="\u25BC  Scroll down for World Settings  \u25BC",
-            text_color="#888888",
-            font=ctk.CTkFont(size=11),
-            fg_color=("gray86", "gray17"),
-            corner_radius=8,
-            height=24,
-            width=260,
+            text_color="#e0e0e0",
+            font=ctk.CTkFont(size=13, weight="bold"),
+            fg_color="#3a7ebf",
+            corner_radius=10,
+            height=30,
+            width=300,
         )
-        self._scroll_hint.place(relx=0.5, rely=0.93, anchor="center")
+        self._scroll_hint.place(relx=0.5, rely=0.88, anchor="center")
 
         # Poll scroll position to auto-hide the hint
         self._poll_scroll_hint()
@@ -95,7 +95,7 @@ class ServerTab(ctk.CTkFrame):
                 self._scroll_hint.place_forget()
             else:
                 if not self._scroll_hint.winfo_ismapped():
-                    self._scroll_hint.place(relx=0.5, rely=0.93, anchor="center")
+                    self._scroll_hint.place(relx=0.5, rely=0.88, anchor="center")
         except Exception:
             pass
         self.after(300, self._poll_scroll_hint)

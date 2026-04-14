@@ -19,6 +19,18 @@ log = logging.getLogger(__name__)
 DISABLED_SUFFIX = ".disabled"
 
 
+def _is_safe_relative_path(entry_path: str) -> bool:
+    """Reject archive entry paths that attempt directory traversal or are absolute."""
+    from pathlib import PurePosixPath, PureWindowsPath
+    for cls in (PurePosixPath, PureWindowsPath):
+        p = cls(entry_path)
+        if p.is_absolute():
+            return False
+        if ".." in p.parts:
+            return False
+    return True
+
+
 class Installer:
     """Executes planned deployments and tracks results."""
 
@@ -26,7 +38,11 @@ class Installer:
         self.backup = backup_manager
 
     def install(self, plan: DeploymentPlan) -> tuple[ModInstall, DeploymentRecord]:
-        """Execute a deployment plan and return the install record + deployment record."""
+        """Execute a deployment plan and return the install record + deployment record.
+
+        On partial failure, successfully deployed files are still tracked so they
+        can be cleanly uninstalled.  The caller is warned via the record notes.
+        """
         if not plan.valid:
             raise ValueError(f"Cannot execute invalid plan: {plan.warnings}")
 
@@ -41,10 +57,16 @@ class Installer:
         deployed_files: list[DeployedFile] = []
         installed_paths: list[str] = []
         backed_up_paths: list[str] = []
+        failed_count = 0
 
         reader = open_archive(archive_path)
         try:
             for pf in plan.files:
+                if not _is_safe_relative_path(pf.archive_entry_path):
+                    log.warning("Skipping unsafe archive path: %s", pf.archive_entry_path)
+                    failed_count += 1
+                    continue
+
                 dest = pf.dest_path
                 ensure_dir(dest.parent)
 
@@ -64,6 +86,7 @@ class Installer:
                     log.info("Installed: %s", dest)
                 except Exception as exc:
                     log.error("Failed to extract %s -> %s: %s", pf.archive_entry_path, dest, exc)
+                    failed_count += 1
                     continue
 
                 installed_paths.append(str(dest))
@@ -78,6 +101,16 @@ class Installer:
                     backed_up_paths.append(backup_record.backup_path)
         finally:
             reader.close()
+
+        if failed_count and not deployed_files:
+            raise RuntimeError(
+                f"Install failed completely — {failed_count} file(s) could not be extracted."
+            )
+
+        notes = f"Installed {len(deployed_files)} files"
+        if failed_count:
+            notes += f" ({failed_count} failed)"
+            log.warning("Partial install: %d succeeded, %d failed", len(deployed_files), failed_count)
 
         mod = ModInstall(
             mod_id=mod_id,
@@ -97,23 +130,29 @@ class Installer:
             target=plan.target.value,
             action="install",
             files=deployed_files,
-            notes=f"Installed {len(deployed_files)} files",
+            notes=notes,
         )
 
-        log.info("Install complete: %s — %d files deployed", mod_id, len(deployed_files))
+        log.info("Install complete: %s — %s", mod_id, notes)
         return mod, record
 
     def uninstall(self, mod: ModInstall) -> DeploymentRecord:
-        """Remove all files tracked by the mod install."""
+        """Remove all files tracked by the mod install (both enabled and disabled)."""
         removed: list[DeployedFile] = []
         for fp in mod.installed_files:
             p = Path(fp)
+            deleted = False
             if p.exists():
                 safe_delete(p)
-                removed.append(DeployedFile(source_archive_path="", dest_path=fp))
-            disabled = p.with_suffix(p.suffix + DISABLED_SUFFIX)
-            if disabled.exists():
+                deleted = True
+            # Also check for the .disabled variant in case the manifest
+            # stores the original path but the file was disabled on disk
+            disabled = Path(fp + DISABLED_SUFFIX) if not fp.endswith(DISABLED_SUFFIX) else None
+            if disabled and disabled.exists():
                 safe_delete(disabled)
+                deleted = True
+            if deleted:
+                removed.append(DeployedFile(source_archive_path="", dest_path=fp))
 
         record = DeploymentRecord(
             mod_id=mod.mod_id,
@@ -126,24 +165,25 @@ class Installer:
         return record
 
     def disable(self, mod: ModInstall) -> bool:
-        """Disable a mod by renaming its files with a .disabled suffix."""
+        """Disable a mod by renaming its files with a .disabled suffix.
+
+        The manifest's installed_files is updated to the .disabled paths so
+        that uninstall/enable stay consistent.
+        """
         count = 0
-        new_paths: list[str] = []
+        updated_paths: list[str] = []
         for fp in mod.installed_files:
             p = Path(fp)
-            if p.exists():
-                disabled = p.with_suffix(p.suffix + DISABLED_SUFFIX)
+            if p.exists() and not fp.endswith(DISABLED_SUFFIX):
+                disabled = p.with_name(p.name + DISABLED_SUFFIX)
                 p.rename(disabled)
-                new_paths.append(str(disabled))
+                updated_paths.append(str(disabled))
                 count += 1
                 log.info("Disabled: %s -> %s", p.name, disabled.name)
             else:
-                new_paths.append(fp)
+                updated_paths.append(fp)
 
-        mod.installed_files = [
-            (f if not Path(f).exists() else f)
-            for f in mod.installed_files
-        ]
+        mod.installed_files = updated_paths
         mod.enabled = False
         log.info("Disabled mod %s — %d files renamed", mod.mod_id, count)
         return count > 0
@@ -151,20 +191,29 @@ class Installer:
     def enable(self, mod: ModInstall) -> bool:
         """Re-enable a disabled mod by removing the .disabled suffix."""
         count = 0
-        restored: list[str] = []
+        restored_paths: list[str] = []
         for fp in mod.installed_files:
             p = Path(fp)
-            disabled = p.with_suffix(p.suffix + DISABLED_SUFFIX)
-            if disabled.exists():
-                original = Path(fp)
-                disabled.rename(original)
-                restored.append(str(original))
+            if p.exists() and fp.endswith(DISABLED_SUFFIX):
+                original = Path(fp[: -len(DISABLED_SUFFIX)])
+                p.rename(original)
+                restored_paths.append(str(original))
                 count += 1
-                log.info("Enabled: %s -> %s", disabled.name, original.name)
+                log.info("Enabled: %s -> %s", p.name, original.name)
+            elif not p.exists():
+                # Try to find the disabled version even if manifest has original path
+                disabled = Path(fp + DISABLED_SUFFIX)
+                if disabled.exists():
+                    disabled.rename(p)
+                    restored_paths.append(fp)
+                    count += 1
+                    log.info("Enabled: %s -> %s", disabled.name, p.name)
+                else:
+                    restored_paths.append(fp)
             else:
-                restored.append(fp)
+                restored_paths.append(fp)
 
-        mod.installed_files = restored
+        mod.installed_files = restored_paths
         mod.enabled = True
         log.info("Enabled mod %s — %d files restored", mod.mod_id, count)
         return count > 0

@@ -28,10 +28,29 @@ from .widgets.status_panel import StatusPanel
 
 log = logging.getLogger(__name__)
 
-APP_DIR = Path(__file__).resolve().parent.parent.parent
-DEFAULT_DATA_DIR = APP_DIR / "data"
-DEFAULT_BACKUP_DIR = APP_DIR / "backups"
-SETTINGS_FILE = DEFAULT_DATA_DIR / "settings.json"
+
+def _resolve_app_dirs() -> tuple[Path, Path, Path]:
+    """Determine data, backup, and settings paths.
+
+    When running from source, use directories next to the repo root.
+    When frozen (PyInstaller), use %LOCALAPPDATA%/WindroseModDeployer so we
+    never try to write inside the packaged exe folder.
+    """
+    import os
+    import sys
+
+    if getattr(sys, "frozen", False):
+        base = Path(os.environ.get("LOCALAPPDATA", Path.home())) / "WindroseModDeployer"
+    else:
+        base = Path(__file__).resolve().parent.parent.parent
+
+    data_dir = base / "data"
+    backup_dir = base / "backups"
+    settings_file = data_dir / "settings.json"
+    return data_dir, backup_dir, settings_file
+
+
+DEFAULT_DATA_DIR, DEFAULT_BACKUP_DIR, SETTINGS_FILE = _resolve_app_dirs()
 
 
 class AppWindow(ctk.CTk):

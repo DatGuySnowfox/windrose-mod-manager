@@ -36,7 +36,14 @@ class BackupRecord:
 
     @classmethod
     def from_dict(cls, d: dict) -> BackupRecord:
-        return cls(**d)
+        return cls(
+            backup_id=d.get("backup_id", ""),
+            timestamp=d.get("timestamp", ""),
+            category=d.get("category", "installs"),
+            source_path=d.get("source_path", ""),
+            backup_path=d.get("backup_path", ""),
+            description=d.get("description", ""),
+        )
 
 
 class BackupManager:
@@ -116,8 +123,15 @@ class BackupManager:
 
     # ---------------------------------------------------------- internals
 
+    def latest_backup(self, category: Optional[str] = None) -> Optional[BackupRecord]:
+        """Return the most recent backup by timestamp, optionally filtered."""
+        candidates = self.list_backups(category)
+        if not candidates:
+            return None
+        return max(candidates, key=lambda r: r.timestamp)
+
     def _category_dir(self, category: str) -> Path:
-        if category == "server_config":
+        if category in ("server_config", "world_config"):
             return self.server_config_dir
         return self.installs_dir
 

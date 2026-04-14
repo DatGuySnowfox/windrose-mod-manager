@@ -40,7 +40,7 @@ class BackupsTab(ctk.CTkFrame):
         self._filter_var = ctk.StringVar(value="all")
         self._filter_menu = ctk.CTkOptionMenu(
             frame, variable=self._filter_var,
-            values=["all", "installs", "server_config"],
+            values=["all", "installs", "server_config", "world_config"],
             command=lambda _: self.refresh(),
             width=140,
         )
@@ -102,7 +102,7 @@ class BackupsTab(ctk.CTkFrame):
         row.grid(row=idx, column=0, sticky="ew", pady=2)
         row.grid_columnconfigure(1, weight=1)
 
-        cat_colors = {"installs": "#3498db", "server_config": "#e67e22"}
+        cat_colors = {"installs": "#3498db", "server_config": "#e67e22", "world_config": "#9b59b6"}
         cat_color = cat_colors.get(record.category, "#95a5a6")
 
         cat_label = ctk.CTkLabel(row, text=record.category.upper(),

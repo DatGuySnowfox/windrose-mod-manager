@@ -61,11 +61,21 @@ class SettingsTab(ctk.CTkFrame):
             entry = ctk.CTkEntry(frame, textvariable=var)
             entry.grid(row=i, column=1, sticky="ew", padx=4, pady=4)
 
+            btn_frame = ctk.CTkFrame(frame, fg_color="transparent")
+            btn_frame.grid(row=i, column=2, padx=4, pady=4)
+
             browse_btn = ctk.CTkButton(
-                frame, text="Browse", width=70,
+                btn_frame, text="Browse", width=70,
                 command=lambda k=key: self._browse_path(k),
             )
-            browse_btn.grid(row=i, column=2, padx=4, pady=4)
+            browse_btn.pack(side="left", padx=(0, 4))
+
+            open_btn = ctk.CTkButton(
+                btn_frame, text="Open", width=50,
+                fg_color="#555555", hover_color="#666666",
+                command=lambda k=key: self._open_path(k),
+            )
+            open_btn.pack(side="left")
 
             status = ctk.CTkLabel(frame, text="—", width=60)
             status.grid(row=i, column=3, padx=(4, 8), pady=4)
@@ -94,11 +104,12 @@ class SettingsTab(ctk.CTkFrame):
         )
         self._save_btn.pack(side="left", padx=8)
 
-        self._open_config_btn = ctk.CTkButton(
-            frame, text="Open Config Folder", width=160,
-            command=self._on_open_config_folder,
+        self._open_data_btn = ctk.CTkButton(
+            frame, text="Open Deployer Data", width=170,
+            fg_color="#555555", hover_color="#666666",
+            command=self._on_open_data_folder,
         )
-        self._open_config_btn.pack(side="right", padx=8)
+        self._open_data_btn.pack(side="right", padx=8)
 
     def _build_info_section(self) -> None:
         self._info_box = ctk.CTkTextbox(self, height=150, state="disabled",
@@ -176,7 +187,10 @@ class SettingsTab(ctk.CTkFrame):
                 else:
                     label.configure(text="FAIL", text_color="#c0392b")
             elif key == "backup_dir":
-                label.configure(text="OK", text_color="#2d8a4e")
+                if path.is_dir() or path.parent.is_dir():
+                    label.configure(text="OK", text_color="#2d8a4e")
+                else:
+                    label.configure(text="FAIL", text_color="#c0392b")
 
     def _on_save(self) -> None:
         paths = self.app.paths
@@ -192,12 +206,26 @@ class SettingsTab(ctk.CTkFrame):
         messagebox.showinfo("Saved", "Settings saved successfully.")
         log.info("Settings saved")
 
-    def _on_open_config_folder(self) -> None:
-        config_path = self._path_vars["local_config"].get().strip()
-        if config_path and Path(config_path).is_dir():
-            os.startfile(config_path)
+    def _open_path(self, key: str) -> None:
+        """Open the folder for a given path setting in the system file explorer."""
+        path_str = self._path_vars[key].get().strip()
+        if not path_str:
+            messagebox.showinfo("Not Set", f"{key.replace('_', ' ').title()} is not configured.")
+            return
+        p = Path(path_str)
+        if p.is_dir():
+            os.startfile(str(p))
+        elif p.is_file():
+            os.startfile(str(p.parent))
         else:
-            messagebox.showinfo("Not Found", "Local config folder not configured or missing.")
+            messagebox.showinfo("Not Found", f"Path does not exist:\n{p}")
+
+    def _on_open_data_folder(self) -> None:
+        from ..app_window import DEFAULT_DATA_DIR
+        if DEFAULT_DATA_DIR.is_dir():
+            os.startfile(str(DEFAULT_DATA_DIR))
+        else:
+            messagebox.showinfo("Not Found", f"Data folder not found:\n{DEFAULT_DATA_DIR}")
 
     def _info_append(self, text: str) -> None:
         try:

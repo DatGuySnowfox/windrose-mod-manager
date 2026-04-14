@@ -309,6 +309,7 @@ class ModsTab(ctk.CTkFrame):
             )
             log.info("Mod installed: %s", mod.display_name)
             self.app.refresh_installed_tab()
+            self.app.refresh_backups_tab()
         except Exception as exc:
             log.error("Install failed: %s", exc)
             messagebox.showerror("Install Failed", str(exc))

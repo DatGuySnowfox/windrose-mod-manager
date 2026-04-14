@@ -102,7 +102,10 @@ def _detect_root_prefix(info: ArchiveInfo) -> None:
 
     if len(top_parts) == 1:
         single = next(iter(top_parts))
-        if single not in KNOWN_ROOT_DIRS:
+        # Only treat as a wrapper folder if at least one entry has deeper parts
+        # (i.e. it's actually a directory, not a bare filename at the root)
+        has_children = any(len(PurePosixPath(e.path).parts) > 1 for e in info.entries)
+        if has_children and single not in KNOWN_ROOT_DIRS:
             info.root_prefix = single + "/"
     elif top_parts & KNOWN_ROOT_DIRS:
         info.root_prefix = ""
