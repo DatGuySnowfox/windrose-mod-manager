@@ -20,8 +20,8 @@ env/
 *.swo
 *~
 
-# PyInstaller
-*.spec
+# PyInstaller (spec is tracked; build artifacts are not)
+
 
 # App runtime data (user-specific)
 data/app_state.json
@@ -34,6 +34,9 @@ backups/metadata/
 Thumbs.db
 Desktop.ini
 .DS_Store
+
+# Test cache
+.pytest_cache/
 
 # Logs
 *.log

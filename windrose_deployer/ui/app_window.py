@@ -75,9 +75,25 @@ class AppWindow(ctk.CTk):
         self.geometry("1100x750")
         self.minsize(900, 600)
 
+        self._set_icon()
+
         self._init_services()
         self._build_ui()
         self._initial_load()
+
+    def _set_icon(self) -> None:
+        """Set the window/taskbar icon from assets/icon.ico."""
+        import sys
+        if getattr(sys, "frozen", False):
+            icon_path = Path(sys._MEIPASS) / "assets" / "icon.ico"
+        else:
+            icon_path = Path(__file__).resolve().parent.parent.parent / "assets" / "icon.ico"
+        try:
+            if icon_path.is_file():
+                self.iconbitmap(str(icon_path))
+                self.after(200, lambda: self.iconbitmap(str(icon_path)))
+        except Exception as exc:
+            log.debug("Could not set icon: %s", exc)
 
     # ---------------------------------------------------------- services
 
