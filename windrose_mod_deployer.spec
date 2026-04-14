@@ -27,6 +27,7 @@ a = Analysis(
     datas=[
         (ctk_path, 'customtkinter'),
         ('assets/icon.ico', 'assets'),
+        ('assets/icon_256.png', 'assets'),
     ] + tkdnd_datas,
     hiddenimports=[
         'customtkinter',

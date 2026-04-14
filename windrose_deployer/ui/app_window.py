@@ -82,18 +82,38 @@ class AppWindow(ctk.CTk):
         self._initial_load()
 
     def _set_icon(self) -> None:
-        """Set the window/taskbar icon from assets/icon.ico."""
+        """Set the window/taskbar icon from assets/.
+
+        CustomTkinter 5.x overrides iconbitmap after ~200ms with its own
+        default icon.  We schedule our icon calls at 300ms to run after
+        that override, and keep a reference to the PhotoImage to prevent GC.
+        """
         import sys
+        from tkinter import PhotoImage
+
         if getattr(sys, "frozen", False):
-            icon_path = Path(sys._MEIPASS) / "assets" / "icon.ico"
+            assets = Path(sys._MEIPASS) / "assets"
         else:
-            icon_path = Path(__file__).resolve().parent.parent.parent / "assets" / "icon.ico"
-        try:
-            if icon_path.is_file():
-                self.iconbitmap(str(icon_path))
-                self.after(200, lambda: self.iconbitmap(str(icon_path)))
-        except Exception as exc:
-            log.debug("Could not set icon: %s", exc)
+            assets = Path(__file__).resolve().parent.parent.parent / "assets"
+
+        ico_path = assets / "icon.ico"
+        png_path = assets / "icon_256.png"
+
+        def _apply_icon() -> None:
+            try:
+                if ico_path.is_file():
+                    self.iconbitmap(str(ico_path))
+                if png_path.is_file():
+                    photo = PhotoImage(file=str(png_path))
+                    self.wm_iconphoto(True, photo)
+                    self._icon_photo = photo
+            except Exception as exc:
+                log.debug("Could not set icon: %s", exc)
+
+        # Apply immediately (may get overridden by CTk)
+        _apply_icon()
+        # Re-apply after CTk's 200ms default-icon override
+        self.after(300, _apply_icon)
 
     # ---------------------------------------------------------- services
 
