@@ -9,7 +9,7 @@ from ..models.deployment_record import DeployedFile, DeploymentRecord
 from ..models.mod_install import InstallTarget, ModInstall
 from ..utils.filesystem import ensure_dir, safe_delete
 from ..utils.hashing import hash_file
-from ..utils.naming import sanitize_mod_id, timestamp_slug
+from ..utils.naming import generate_mod_id, timestamp_slug
 from .archive_handler import open_archive
 from .backup_manager import BackupManager
 from .deployment_planner import DeploymentPlan
@@ -46,7 +46,7 @@ class Installer:
         if not plan.valid:
             raise ValueError(f"Cannot execute invalid plan: {plan.warnings}")
 
-        mod_id = sanitize_mod_id(plan.mod_name)
+        mod_id = generate_mod_id()
         archive_path = Path(plan.archive_path)
         archive_hash: Optional[str] = None
         try:
@@ -57,6 +57,7 @@ class Installer:
         deployed_files: list[DeployedFile] = []
         installed_paths: list[str] = []
         backed_up_paths: list[str] = []
+        backup_map: dict[str, str] = {}
         failed_count = 0
 
         reader = open_archive(archive_path)
@@ -99,6 +100,7 @@ class Installer:
                 deployed_files.append(df)
                 if backup_record:
                     backed_up_paths.append(backup_record.backup_path)
+                    backup_map[str(dest)] = backup_record.backup_path
         finally:
             reader.close()
 
@@ -122,6 +124,7 @@ class Installer:
             targets=[plan.target.value],
             installed_files=installed_paths,
             backed_up_files=backed_up_paths,
+            backup_map=backup_map,
             enabled=True,
         )
 
@@ -137,31 +140,48 @@ class Installer:
         return mod, record
 
     def uninstall(self, mod: ModInstall) -> DeploymentRecord:
-        """Remove all files tracked by the mod install (both enabled and disabled)."""
+        """Remove all files tracked by the mod install and restore any backed-up originals."""
         removed: list[DeployedFile] = []
+        restored_count = 0
         for fp in mod.installed_files:
             p = Path(fp)
             deleted = False
             if p.exists():
                 safe_delete(p)
                 deleted = True
-            # Also check for the .disabled variant in case the manifest
-            # stores the original path but the file was disabled on disk
             disabled = Path(fp + DISABLED_SUFFIX) if not fp.endswith(DISABLED_SUFFIX) else None
             if disabled and disabled.exists():
                 safe_delete(disabled)
                 deleted = True
+
+            # Restore the original file from backup if one was saved
+            backup_path = mod.backup_map.get(fp)
+            if backup_path:
+                bp = Path(backup_path)
+                if bp.is_file():
+                    ensure_dir(p.parent)
+                    import shutil
+                    shutil.copy2(str(bp), str(p))
+                    restored_count += 1
+                    log.info("Restored original: %s from %s", p, bp)
+
             if deleted:
-                removed.append(DeployedFile(source_archive_path="", dest_path=fp))
+                removed.append(DeployedFile(source_archive_path="", dest_path=fp,
+                                            backup_path=backup_path))
+
+        notes = f"Removed {len(removed)} files"
+        if restored_count:
+            notes += f", restored {restored_count} originals"
 
         record = DeploymentRecord(
             mod_id=mod.mod_id,
             target=",".join(mod.targets),
             action="uninstall",
             files=removed,
-            notes=f"Removed {len(removed)} files",
+            notes=notes,
         )
-        log.info("Uninstall complete: %s — %d files removed", mod.mod_id, len(removed))
+        log.info("Uninstall complete: %s — %d files removed, %d restored",
+                 mod.mod_id, len(removed), restored_count)
         return record
 
     def disable(self, mod: ModInstall) -> bool:

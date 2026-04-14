@@ -24,6 +24,7 @@ class ModInstall:
     targets: list[str] = field(default_factory=list)
     installed_files: list[str] = field(default_factory=list)
     backed_up_files: list[str] = field(default_factory=list)
+    backup_map: dict[str, str] = field(default_factory=dict)
     install_time: str = field(default_factory=lambda: datetime.now().isoformat())
     enabled: bool = True
 
@@ -42,6 +43,7 @@ class ModInstall:
             "targets": self.targets,
             "installed_files": self.installed_files,
             "backed_up_files": self.backed_up_files,
+            "backup_map": self.backup_map,
             "install_time": self.install_time,
             "enabled": self.enabled,
         }
@@ -58,6 +60,7 @@ class ModInstall:
             targets=d.get("targets", []),
             installed_files=d.get("installed_files", []),
             backed_up_files=d.get("backed_up_files", []),
+            backup_map=d.get("backup_map", {}),
             install_time=d.get("install_time", ""),
             enabled=d.get("enabled", True),
         )

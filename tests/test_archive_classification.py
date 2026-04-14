@@ -73,6 +73,24 @@ class TestDetectVariants:
         _detect_variants(info)
         assert len(info.variant_groups) >= 1
 
+    def test_real_world_variants_with_suffix(self):
+        """Real archive: Stack_Size_Changes with _P suffix before .pak."""
+        info = _info_with_entries([
+            ArchiveEntry(path="Stack_Size_Changes_x02_P.pak", size=100),
+            ArchiveEntry(path="Stack_Size_Changes_x03_P.pak", size=100),
+            ArchiveEntry(path="Stack_Size_Changes_x04_P.pak", size=100),
+            ArchiveEntry(path="Stack_Size_Changes_x05_P.pak", size=100),
+            ArchiveEntry(path="Stack_Size_Changes_x10_P.pak", size=100),
+            ArchiveEntry(path="Stack_Size_Changes_999_P.pak", size=100),
+            ArchiveEntry(path="Stack_Size_Changes_9999_P.pak", size=100),
+            ArchiveEntry(path="Stack_Size_Changes_99999_P.pak", size=100),
+            ArchiveEntry(path="Stack_Size_Changes_999999_P.pak", size=100),
+        ])
+        _classify(info)
+        _detect_variants(info)
+        assert len(info.variant_groups) == 1
+        assert len(info.variant_groups[0].variants) == 9
+
     def test_single_pak_no_variants(self):
         info = _info_with_entries([
             ArchiveEntry(path="mod.pak", size=100),

@@ -14,9 +14,15 @@ log = logging.getLogger(__name__)
 
 PAK_EXTENSIONS = {".pak", ".utoc", ".ucas"}
 KNOWN_ROOT_DIRS = {"R5", "Engine"}
-VARIANT_PATTERN = re.compile(
-    r"^(?P<base>.+?)(?:[-_ ]?(?:x|v|var|variant|option)?)(?P<num>\d{2,})\.pak$",
-    re.IGNORECASE,
+_VARIANT_NUMBER_RE = re.compile(
+    r"""
+    (?:[-_ ]?)                       # optional separator
+    (?:x|v|var|variant|option)?      # optional label
+    (\d{2,})                         # 2+ digit number (the variant id)
+    (?:[-_ ]\w+)?                    # optional trailing suffix like _P
+    $                                # end of stem
+    """,
+    re.IGNORECASE | re.VERBOSE,
 )
 
 
@@ -127,22 +133,32 @@ def _classify(info: ArchiveInfo) -> None:
 
 
 def _detect_variants(info: ArchiveInfo) -> None:
-    """Group pak files that look like numbered alternatives."""
+    """Group pak files that look like numbered alternatives.
+
+    Strategy: strip .pak, look for a numeric segment near the end of the stem,
+    and group files that share the same prefix before that segment.  Handles
+    real-world patterns like ``Stack_Size_Changes_x10_P.pak``.
+
+    Only uses the regex-based grouping to avoid false positives on additive
+    multi-pak mods (e.g. ShipOverhaul_Base.pak + ShipOverhaul_Compatibility.pak).
+    """
     if len(info.pak_entries) < 2:
         return
 
     groups: dict[str, list[ArchiveEntry]] = defaultdict(list)
+
     for entry in info.pak_entries:
-        name = PurePosixPath(entry.path).name
-        m = VARIANT_PATTERN.match(name)
+        stem = PurePosixPath(entry.path).stem
+        m = _VARIANT_NUMBER_RE.search(stem)
         if m:
-            groups[m.group("base")].append(entry)
+            base = stem[: m.start()]
+            groups[base].append(entry)
 
     for base, members in groups.items():
         if len(members) >= 2:
             info.variant_groups.append(VariantGroup(base_name=base, variants=members))
             info.warnings.append(
-                f"Detected {len(members)} variants for '{base}' — user should choose."
+                f"Detected {len(members)} variants for '{base}' — user should choose one."
             )
 
 

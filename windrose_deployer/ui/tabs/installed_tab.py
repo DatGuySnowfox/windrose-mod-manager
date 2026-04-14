@@ -229,6 +229,26 @@ class InstalledTab(ctk.CTkFrame):
             )
             return
 
+        # Preflight: validate the replacement BEFORE touching the current install
+        from ...core.archive_inspector import inspect_archive
+        from ...core.deployment_planner import plan_deployment
+        from ...models.mod_install import InstallTarget
+
+        try:
+            info = inspect_archive(archive_path)
+            target = InstallTarget(mod.targets[0]) if mod.targets else InstallTarget.CLIENT
+            plan = plan_deployment(info, self.app.paths, target,
+                                   mod.selected_variant, mod.display_name)
+        except Exception as exc:
+            messagebox.showerror("Reinstall Failed",
+                                 f"Could not prepare reinstall:\n{exc}")
+            return
+
+        if not plan.valid:
+            messagebox.showerror("Reinstall Failed",
+                                 "New install plan is invalid:\n" + "\n".join(plan.warnings))
+            return
+
         confirm = messagebox.askyesno(
             "Confirm Reinstall",
             f"Reinstall '{mod.display_name}'?\n\n"
@@ -238,34 +258,23 @@ class InstalledTab(ctk.CTkFrame):
         if not confirm:
             return
 
-        # Uninstall first
+        # Uninstall current
         record = self.app.installer.uninstall(mod)
         self.app.manifest.add_record(record)
         self.app.manifest.remove_mod(mod.mod_id)
 
-        # Re-install using the same archive, target, and variant
+        # Install replacement (already validated)
         try:
-            from ...core.archive_inspector import inspect_archive
-            from ...core.deployment_planner import plan_deployment
-            from ...models.mod_install import InstallTarget
-
-            info = inspect_archive(archive_path)
-            target = InstallTarget(mod.targets[0]) if mod.targets else InstallTarget.CLIENT
-            plan = plan_deployment(info, self.app.paths, target,
-                                   mod.selected_variant, mod.display_name)
-
-            if not plan.valid:
-                messagebox.showerror("Reinstall Failed", "\n".join(plan.warnings))
-                self.refresh()
-                return
-
             new_mod, new_record = self.app.installer.install(plan)
             self.app.manifest.add_mod(new_mod)
             self.app.manifest.add_record(new_record)
             log.info("Reinstalled mod: %s", new_mod.display_name)
         except Exception as exc:
-            log.error("Reinstall failed: %s", exc)
-            messagebox.showerror("Reinstall Failed", str(exc))
+            log.error("Reinstall failed after uninstall: %s", exc)
+            messagebox.showerror("Reinstall Failed",
+                                 f"Uninstall succeeded but reinstall failed:\n{exc}\n\n"
+                                 "The mod has been uninstalled. You can try installing "
+                                 "again from the Mods tab.")
 
         self.refresh()
         self.app.refresh_backups_tab()

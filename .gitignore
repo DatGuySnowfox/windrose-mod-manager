@@ -26,8 +26,11 @@ env/
 # App runtime data (user-specific)
 data/app_state.json
 data/settings.json
+data/archive_library.json
+data/*.log
 backups/installs/
 backups/server_config/
+backups/world_config/
 backups/metadata/
 
 # OS

@@ -7,8 +7,16 @@ from datetime import datetime
 from pathlib import PurePosixPath
 
 
+def generate_mod_id() -> str:
+    """Generate a stable unique mod identity (UUID-based)."""
+    return uuid.uuid4().hex
+
+
 def sanitize_mod_id(name: str) -> str:
-    """Turn a human-readable mod name into a safe filesystem-friendly id."""
+    """Turn a human-readable mod name into a safe filesystem-friendly id.
+
+    Kept for backward compatibility but new installs use generate_mod_id().
+    """
     slug = re.sub(r"[^\w\-.]", "_", name.strip())
     slug = re.sub(r"_+", "_", slug).strip("_")
     return slug.lower() if slug else f"mod_{uuid.uuid4().hex[:8]}"
